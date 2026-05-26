@@ -1,14 +1,1 @@
-name: Rebirth Push
-on: [push, workflow_dispatch]
-jobs:
-rebirth-push:
-runs-on: ubuntu-latest
-permissions: write-all
-steps:
-- uses: actions/checkout@v4
-- run: |
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
-git add .
-git commit -m "auto update by actions" || echo "no changes to commit"
-git push
+
