@@ -4,8 +4,10 @@ on:
   push:
   workflow_dispatch:
   schedule:
-  - cron: "30 23 * * *"
-  - cron: "30 15 * * *"
+    # 北京时间 07:30 = UTC 23:30
+    - cron: "30 23 * * *"
+    # 北京时间 23:30 = UTC 15:30
+    - cron: "30 15 * * *"
 
 permissions:
   contents: read
@@ -23,10 +25,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      -- name: Install dependencies
-  run: |
-    python -m pip install --upgrade pip
-    pip install requests
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
       - name: Run morning push
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
