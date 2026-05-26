@@ -1,10 +1,11 @@
 name: Rebirth Push
 
 on:
+  push:
   workflow_dispatch:
   schedule:
-    - cron: "30 23 * * *"
-    - cron: "30 15 * * *"
+  - cron: "30 23 * * *"
+  - cron: "30 15 * * *"
 
 permissions:
   contents: read
