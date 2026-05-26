@@ -1,1 +1,44 @@
+name: Rebirth Push
 
+on:
+  workflow_dispatch:
+  schedule:
+    # 北京时间 07:30 = UTC 23:30
+    - cron: "30 23 * * *"
+    # 北京时间 23:30 = UTC 15:30
+    - cron: "30 15 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  rebirth-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run morning or night push
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          HOUR=$(date -u +"%H")
+          if [ "$HOUR" = "23" ]; then
+            python main.py morning
+          elif [ "$HOUR" = "15" ]; then
+            python main.py night
+          else
+            python main.py morning
+          fi
