@@ -1062,6 +1062,52 @@ def render_morning_push(today_text: str | None = None) -> str:
     return render_morning_rpg_push(today_text)
 
 
+def render_morning_serverchan_push(today_text: str | None = None) -> str:
+    """生成 Server酱 微信里稳定显示的 REBIRTH RPG OS V2 文本卡片。"""
+    data = build_dashboard_data(today_text)
+    main_task = find_task(data, "morning_ai_learning")
+    energy_task = find_task(data, "morning_energy")
+    wealth_task = find_task(data, "morning_wealth_action")
+    reading_task = find_task(data, "evening_reading")
+    level = max(1, data["streak"] + 1)
+    xp_today = data["completion"]["done_count"] * 30
+    money = data["money"]
+    ai = data["ai"]
+    reading = data["reading"]
+
+    return "\n\n".join(
+        [
+            "# REBIRTH RPG OS V2｜大怪升级人生控制台",
+            "今天按 RPG 主线推进：打怪、拿 XP、升级。",
+            f"日期：{data['today']}｜Lv {level}｜连续 {data['streak']} 天｜今日XP {xp_today}",
+            "## ① 今日主线任务",
+            f"主线目标：{short_task_name(main_task)}",
+            f"今日第一步：{main_task['task']}",
+            "预计XP：+120",
+            "## ② AI Academy",
+            f"今日课程：Python Day {ai['day']}",
+            f"今日实操：{main_task['task']}",
+            "课程→行动绑定：学完立刻写一个小例子，并交给 Codex 改进。",
+            "## ③ 显化模块",
+            "我正在创造1000w人生。",
+            "我会让父母开心。",
+            "我拥有财富、房子、E300L。",
+            "## ④ 能量提升",
+            f"晨间启动动作：{energy_task['task']}",
+            "## ⑤ 阅读系统",
+            f"今日书籍：《{reading['book']}》",
+            f"今日章节：第 {reading['chapter']} 章｜{reading_task['time']}",
+            "## ⑥ 财富重建",
+            f"今日赚钱动作：{wealth_task['task']}",
+            f"当前还款目标：{money['current']:.0f} / {money['target']:.0f} 元",
+            "## ⑦ XP系统",
+            f"等级：Lv {level}",
+            f"经验值：{xp_today} XP",
+            "打开今天的手机消息，先完成第一步。大怪不是一天打完，是每天削一层血。",
+        ]
+    )
+
+
 def get_night_review(record: Dict[str, Any]) -> Dict[str, Any]:
     """读取晚间结算字段，缺失时给默认值。"""
     review = record.get("night_review", {})

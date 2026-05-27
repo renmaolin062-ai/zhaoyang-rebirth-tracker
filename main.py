@@ -24,6 +24,7 @@ from typing import Any, Dict, Tuple
 
 from dashboard import (
     render_morning_push,
+    render_morning_serverchan_push,
     render_night_push,
     save_daily_dashboard,
     save_night_dashboard,
@@ -332,9 +333,9 @@ def send_email(title: str, content: str) -> Tuple[bool, str]:
     return True, "邮箱推送成功。"
 
 
-def send_notification(title: str, content: str) -> bool:
+def send_notification(title: str, content: str, serverchan_content: str | None = None) -> bool:
     """统一推送入口：Server酱优先，失败后尝试 PushPlus，再失败就尝试邮箱。"""
-    serverchan_ok, serverchan_message = send_serverchan(title, content)
+    serverchan_ok, serverchan_message = send_serverchan(title, serverchan_content or content)
     print(serverchan_message)
     if serverchan_ok:
         return True
@@ -388,11 +389,13 @@ def push_morning() -> None:
     """生成并推送早晨行动卡。"""
     today_text = get_today()
     card = render_morning_push(today_text)
+    serverchan_card = render_morning_serverchan_push(today_text)
     log_path = save_daily_log(today_text, card)
     dashboard_path = save_daily_dashboard(today_text)
     print(f"REBIRTH RPG OS V2 已保存：{log_path}")
     print(f"每日 RPG 控制台已生成：{dashboard_path}")
-    send_notification("【强提醒】赵皓阳今日重塑任务", card)
+    print("推送版本：REBIRTH RPG OS V2｜大怪升级人生控制台")
+    send_notification("【强提醒】REBIRTH RPG OS V2｜赵皓阳大怪升级", card, serverchan_card)
 
 
 def push_evening() -> None:
