@@ -456,6 +456,8 @@ def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
             "day": int(config.get("PYTHON_DAY", 1) or 1),
             "target": 365,
             "percent": percent(float(config.get("PYTHON_DAY", 1) or 1), 365),
+            "teacher": str(config.get("AI_COURSE_TEACHER", "吴恩达 Andrew Ng") or "吴恩达 Andrew Ng"),
+            "course_name": str(config.get("AI_COURSE_NAME", "AI 与 Python 基础能力课") or "AI 与 Python 基础能力课"),
         },
         "reading": {
             "book": config.get("BOOK_NAME", "终身成长"),
@@ -694,6 +696,7 @@ def render_ai_academy(data: Dict[str, Any], editable: bool) -> str:
     """AI Academy 面板。"""
     task = find_task(data, "morning_ai_learning")
     status = get_task_status(data, task["id"])
+    ai = data["ai"]
     steps = ["课程", "认知", "实操", "输出"]
     flow = "".join(f'<div class="academy-step"><span>{index}</span><strong>{step}</strong></div>' for index, step in enumerate(steps, 1))
     return f"""
@@ -706,8 +709,10 @@ def render_ai_academy(data: Dict[str, Any], editable: bool) -> str:
           <div class="teacher-avatar">AI</div>
         </div>
         <div class="course-card">
-          <span>Python Day {data["ai"]["day"]}</span>
+          <span>Python Day {ai["day"]}</span>
           <h3>{html.escape(short_task_name(task))}</h3>
+          <p><strong>今日老师：</strong>{html.escape(ai["teacher"])}</p>
+          <p><strong>课程名称：</strong>{html.escape(ai["course_name"])}</p>
           <p>{html.escape(task["task"])}</p>
           <small>{html.escape(task["time"])} / {html.escape(task["duration"])}</small>
         </div>
@@ -1006,7 +1011,8 @@ def render_morning_rpg_push(today_text: str | None = None) -> str:
       <div style="border:1px solid rgba(125,249,255,.22);border-radius:24px;padding:18px;background:rgba(255,255,255,.055);">
         <div style="color:#7df9ff;font-size:12px;font-weight:900;letter-spacing:.08em;">② AI ACADEMY</div>
         <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">AI Academy</h2>
-        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日课程：</b>Python Day {ai["day"]}</p>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日老师：</b>{html.escape(ai["teacher"])}</p>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日课程：</b>{html.escape(ai["course_name"])}｜Python Day {ai["day"]}</p>
         <p style="margin:0 0 8px;color:#96a2bf;line-height:1.65;"><b>今日实操：</b>{html.escape(main_task["task"])}</p>
         <p style="margin:0;color:#63f3a6;line-height:1.65;"><b>课程→行动绑定：</b>学完立刻写一个小例子，并把问题交给 Codex 改进。</p>
       </div>
@@ -1085,7 +1091,8 @@ def render_morning_serverchan_push(today_text: str | None = None) -> str:
             f"今日第一步：{main_task['task']}",
             "预计XP：+120",
             "## ② AI Academy",
-            f"今日课程：Python Day {ai['day']}",
+            f"今日老师：{ai['teacher']}",
+            f"今日课程：{ai['course_name']}｜Python Day {ai['day']}",
             f"今日实操：{main_task['task']}",
             "课程→行动绑定：学完立刻写一个小例子，并交给 Codex 改进。",
             "## ③ 显化模块",
@@ -1261,6 +1268,7 @@ def render_night_dashboard_html(
           <span class="panel-kicker">AI ACADEMY REVIEW</span>
           <h2>AI Academy复盘</h2>
           <div class="result-board">
+            {render_result_line("今日老师", data["ai"]["teacher"])}
             {render_result_line("今日课程", short_task_name(ai_task))}
             {render_result_line("学习时间", ai_task["time"])}
           </div>

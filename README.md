@@ -10,6 +10,13 @@
 - 哪些任务完成了，哪些还没完成
 - 10w还款目标、AI Academy、显化、阅读和 XP 连续打卡进度
 
+AI Academy 会显示今天的课程老师。默认是 `吴恩达 Andrew Ng`，你可以在 `config.json` 里修改：
+
+```json
+"AI_COURSE_TEACHER": "吴恩达 Andrew Ng",
+"AI_COURSE_NAME": "AI 与 Python 基础能力课"
+```
+
 ## 1. 每天固定时间
 
 - 07:30：自动推送 `REBIRTH RPG OS V2` 早晨人生控制台

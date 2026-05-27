@@ -115,6 +115,8 @@ def load_config() -> Dict[str, Any]:
         "BOOK_NAME": "终身成长",
         "BOOK_CHAPTER": 1,
         "PYTHON_DAY": 1,
+        "AI_COURSE_TEACHER": "吴恩达 Andrew Ng",
+        "AI_COURSE_NAME": "AI 与 Python 基础能力课",
         "START_DATE": "2026-05-25",
         "MORNING_PUSH_TIME": "07:30",
         "EVENING_PUSH_TIME": "23:30",
