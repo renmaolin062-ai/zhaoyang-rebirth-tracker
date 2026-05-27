@@ -2,6 +2,9 @@ name: Rebirth Push
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
   schedule:
     # 北京时间 07:30 = UTC 23:30
     - cron: "30 23 * * *"
@@ -42,6 +45,22 @@ jobs:
           cd "$PROJECT_DIR"
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Confirm RPG OS V2 content
+        run: |
+          cd "$PROJECT_DIR"
+          echo "GitHub SHA: $GITHUB_SHA"
+          git log -1 --oneline
+          python - <<'PY'
+          from dashboard import render_morning_serverchan_push
+          content = render_morning_serverchan_push()
+          print("Push preview start:")
+          print(content[:600])
+          if "REBIRTH RPG OS V2" not in content or "大怪升级人生控制台" not in content:
+              raise SystemExit("RPG OS V2 marker missing")
+          if "| 时间 |" in content or "早晨启动表格" in content or "今日监督表格" in content:
+              raise SystemExit("Old table marker found")
+          PY
 
       - name: Run morning or night push
         env:
