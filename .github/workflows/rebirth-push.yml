@@ -1,10 +1,11 @@
 name: Rebirth Push
 
 on:
-  push:
   workflow_dispatch:
   schedule:
+    # 北京时间 07:30 = UTC 23:30
     - cron: "30 23 * * *"
+    # 北京时间 23:30 = UTC 15:30
     - cron: "30 15 * * *"
 
 permissions:
@@ -23,19 +24,37 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Show files
+      - name: Detect project directory
         run: |
-          pwd
-          ls -la
+          if [ -f "requirements.txt" ] && [ -f "main.py" ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f "zhaoyang_rebirth_tracker/requirements.txt" ] && [ -f "zhaoyang_rebirth_tracker/main.py" ]; then
+            echo "PROJECT_DIR=zhaoyang_rebirth_tracker" >> "$GITHUB_ENV"
+          else
+            echo "Could not find requirements.txt and main.py."
+            echo "Repository files:"
+            find . -maxdepth 4 -type f | sort
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |
+          cd "$PROJECT_DIR"
           python -m pip install --upgrade pip
-          pip install requests
+          pip install -r requirements.txt
 
-      - name: Run morning push
+      - name: Run morning or night push
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          NIGHT_DASHBOARD_PUBLIC_URL: ${{ secrets.NIGHT_DASHBOARD_PUBLIC_URL }}
         run: |
-          python main.py morning
+          cd "$PROJECT_DIR"
+          HOUR=$(date -u +"%H")
+          if [ "$HOUR" = "23" ]; then
+            python main.py morning
+          elif [ "$HOUR" = "15" ]; then
+            python main.py night
+          else
+            python main.py morning
+          fi

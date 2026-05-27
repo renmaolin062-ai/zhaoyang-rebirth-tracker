@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from dashboard import (
-    render_evening_push,
     render_morning_push,
     render_night_push,
     save_daily_dashboard,
@@ -45,7 +44,6 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 PROGRESS_PATH = BASE_DIR / "progress.json"
 LOGS_DIR = BASE_DIR / "logs"
-TEMPLATES_DIR = BASE_DIR / "templates"
 
 
 def make_console_utf8() -> None:
@@ -204,50 +202,6 @@ def get_python_task(day: int) -> Dict[str, str]:
     }
 
 
-def render_template(template_name: str, values: Dict[str, Any]) -> str:
-    """用简单替换渲染 Markdown 模板，避免复杂模板语法。"""
-    template_path = TEMPLATES_DIR / template_name
-    if not template_path.exists():
-        raise FileNotFoundError(f"找不到模板文件：{template_path}")
-
-    content = template_path.read_text(encoding="utf-8")
-    for key, value in values.items():
-        content = content.replace("{{" + key + "}}", str(value))
-    return content
-
-
-def generate_morning_card(today_text: str | None = None) -> str:
-    """生成今日行动卡，并返回 Markdown 内容。"""
-    config = load_config()
-    today_text = today_text or get_today()
-
-    target_money = int(config.get("TARGET_MONEY", 100000))
-    current_money = int(config.get("CURRENT_MONEY", 0))
-    remaining_money = max(target_money - current_money, 0)
-    python_day = int(config.get("PYTHON_DAY", 1))
-    python_task = get_python_task(python_day)
-
-    values = {
-        "DATE": today_text,
-        "CURRENT_STAGE": get_current_stage(config, today_text),
-        "BOOK_NAME": config.get("BOOK_NAME", "终身成长"),
-        "BOOK_CHAPTER": config.get("BOOK_CHAPTER", 1),
-        "PYTHON_DAY": python_day,
-        "PYTHON_TASK_TITLE": python_task["title"],
-        "PYTHON_TASK_DETAIL": python_task["detail"],
-        "TARGET_MONEY": target_money,
-        "CURRENT_MONEY": current_money,
-        "REMAINING_MONEY": remaining_money,
-    }
-    return render_template("morning_card.md", values)
-
-
-def generate_evening_review(today_text: str | None = None) -> str:
-    """生成晚间复盘提醒，并返回 Markdown 内容。"""
-    today_text = today_text or get_today()
-    return render_template("evening_review.md", {"DATE": today_text})
-
-
 def save_daily_log(today_text: str, content: str) -> Path:
     """把每天的行动卡保存到 logs/YYYY-MM-DD.md。"""
     LOGS_DIR.mkdir(exist_ok=True)
@@ -257,7 +211,7 @@ def save_daily_log(today_text: str, content: str) -> Path:
 
 
 def send_pushplus(title: str, content: str) -> Tuple[bool, str]:
-    """使用 PushPlus 推送 Markdown 内容到微信。"""
+    """使用 PushPlus 推送 HTML 内容到微信。"""
     if requests is None:
         return False, "缺少 requests 依赖，请在项目目录运行：pip install -r requirements.txt"
 
@@ -271,7 +225,7 @@ def send_pushplus(title: str, content: str) -> Tuple[bool, str]:
         "token": token,
         "title": title,
         "content": content,
-        "template": "markdown",
+        "template": "html",
     }
 
     try:
@@ -298,7 +252,7 @@ def send_pushplus(title: str, content: str) -> Tuple[bool, str]:
 
 
 def send_serverchan(title: str, content: str) -> Tuple[bool, str]:
-    """使用 Server酱 推送 Markdown 内容到微信。"""
+    """使用 Server酱 推送内容到微信。"""
     if requests is None:
         return False, "缺少 requests 依赖，请在项目目录运行：pip install -r requirements.txt"
 
@@ -436,8 +390,8 @@ def push_morning() -> None:
     card = render_morning_push(today_text)
     log_path = save_daily_log(today_text, card)
     dashboard_path = save_daily_dashboard(today_text)
-    print(f"今日行动卡已保存：{log_path}")
-    print(f"每日监督表格已生成：{dashboard_path}")
+    print(f"REBIRTH RPG OS V2 已保存：{log_path}")
+    print(f"每日 RPG 控制台已生成：{dashboard_path}")
     send_notification("【强提醒】赵皓阳今日重塑任务", card)
 
 

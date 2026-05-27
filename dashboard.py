@@ -885,7 +885,7 @@ def render_dashboard_html(
               今日备注
               <textarea name="note" placeholder="今天最值得记录的一句话">{html.escape(str(record.get('note', '')))}</textarea>
             </label>
-            <button class="submit-btn" type="submit">保存今日监督表格</button>
+            <button class="submit-btn" type="submit">保存今日 RPG 进度</button>
           </section>
         """
 
@@ -965,61 +965,101 @@ def save_daily_dashboard(today_text: str | None = None) -> Path:
     return DASHBOARD_PATH
 
 
-def render_markdown_table(section_key: str, data: Dict[str, Any]) -> str:
-    """生成推送用 Markdown 表格。"""
-    section = next(item for item in data["sections"] if item["key"] == section_key)
-    lines = [
-        f"## {section['title']}",
-        "",
-        "| 时间 | 模块 | 具体任务 | 预计耗时 |",
-        "| --- | --- | --- | --- |",
-    ]
-    for task in section["tasks"]:
-        lines.append(f"| {task['time']} | {task['module']} | {task['task']} | {task['duration']} |")
-    return "\n".join(lines)
-
-
-def render_morning_push(today_text: str | None = None) -> str:
-    """早上推送的强提醒表格。"""
+def render_morning_rpg_push(today_text: str | None = None) -> str:
+    """生成微信推送用 REBIRTH RPG OS V2 HTML。"""
     data = build_dashboard_data(today_text)
+    main_task = find_task(data, "morning_ai_learning")
+    energy_task = find_task(data, "morning_energy")
+    wealth_task = find_task(data, "morning_wealth_action")
+    reading_task = find_task(data, "evening_reading")
+    level = max(1, data["streak"] + 1)
+    current_xp = data["completion"]["done_count"] * 30
+    target_xp = data["completion"]["total"] * 30
     money = data["money"]
     ai = data["ai"]
     reading = data["reading"]
-    return "\n\n".join(
-        [
-            "⚠️ 现在是早上7:30，请8点起床后第一眼查看今日行动卡。",
-            f"# 🌅 今日监督表格｜{data['today']}",
-            f"今日总目标：{data['goal']}",
-            f"动态安排：昨天完成率 {data['yesterday_rate']}%，连续打卡 {data['streak']} 天。",
-            render_markdown_table("morning", data),
-            render_markdown_table("daytime", data),
-            f"10w还款目标：{money['current']:.0f} / {money['target']:.0f} 元，剩余 {money['remaining']:.0f} 元",
-            f"AI学习进度：第 {ai['day']} / {ai['target']} 天",
-            f"阅读进度：《{reading['book']}》第 {reading['chapter']} 章",
-            "打开本地网页完成打卡：http://127.0.0.1:5000",
-        ]
-    )
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>REBIRTH RPG OS V2</title>
+</head>
+<body style="margin:0;padding:0;background:#060814;color:#eef3ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','Microsoft YaHei',Arial,sans-serif;">
+  <div style="max-width:720px;margin:0 auto;padding:18px;background:linear-gradient(160deg,#070914 0%,#111936 48%,#160d2e 100%);">
+    <div style="border:1px solid rgba(125,249,255,.22);border-radius:26px;padding:24px;background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.04));box-shadow:0 20px 60px rgba(0,0,0,.35);">
+      <div style="display:inline-block;padding:7px 11px;border:1px solid rgba(125,249,255,.32);border-radius:999px;color:#7df9ff;background:rgba(125,249,255,.08);font-size:12px;font-weight:800;letter-spacing:.08em;">REBIRTH RPG OS V2</div>
+      <h1 style="margin:16px 0 8px;font-size:34px;line-height:1.05;color:#fff;">赵皓阳 · 今日人生控制台</h1>
+      <p style="margin:0;color:#96a2bf;line-height:1.7;">{html.escape(data["today"])}｜08:00 起床｜10:00 上班｜今天不是打卡，是升级。</p>
+    </div>
+
+    <div style="margin-top:14px;display:grid;gap:12px;">
+      <div style="border:1px solid rgba(255,211,122,.38);border-radius:24px;padding:18px;background:linear-gradient(135deg,rgba(255,211,122,.14),rgba(255,255,255,.05));">
+        <div style="color:#ffd37a;font-size:12px;font-weight:900;letter-spacing:.08em;">① MAIN QUEST</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">今日主线任务</h2>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>主线目标：</b>{html.escape(short_task_name(main_task))}</p>
+        <p style="margin:0 0 8px;color:#96a2bf;line-height:1.65;"><b>今日第一步：</b>{html.escape(main_task["task"])}</p>
+        <div style="display:inline-block;margin-top:4px;padding:8px 12px;border-radius:999px;background:linear-gradient(135deg,#ffd37a,#ff9f43);color:#201605;font-weight:900;">预计XP +120</div>
+      </div>
+
+      <div style="border:1px solid rgba(125,249,255,.22);border-radius:24px;padding:18px;background:rgba(255,255,255,.055);">
+        <div style="color:#7df9ff;font-size:12px;font-weight:900;letter-spacing:.08em;">② AI ACADEMY</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">AI Academy</h2>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日课程：</b>Python Day {ai["day"]}</p>
+        <p style="margin:0 0 8px;color:#96a2bf;line-height:1.65;"><b>今日实操：</b>{html.escape(main_task["task"])}</p>
+        <p style="margin:0;color:#63f3a6;line-height:1.65;"><b>课程→行动绑定：</b>学完立刻写一个小例子，并把问题交给 Codex 改进。</p>
+      </div>
+
+      <div style="border:1px solid rgba(169,121,255,.34);border-radius:24px;padding:18px;background:linear-gradient(135deg,rgba(111,75,255,.22),rgba(255,255,255,.05));">
+        <div style="color:#cbb7ff;font-size:12px;font-weight:900;letter-spacing:.08em;">③ MANIFESTATION</div>
+        <h2 style="margin:8px 0 12px;color:#fff;font-size:24px;">显化模块</h2>
+        <div style="display:grid;gap:10px;">
+          <div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.08);font-size:20px;font-weight:800;color:#fff;">我正在创造1000w人生。</div>
+          <div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.08);font-size:20px;font-weight:800;color:#fff;">我会让父母开心。</div>
+          <div style="padding:14px;border-radius:18px;background:rgba(255,255,255,.08);font-size:20px;font-weight:800;color:#fff;">我拥有财富、房子、E300L。</div>
+        </div>
+      </div>
+
+      <div style="border:1px solid rgba(125,249,255,.20);border-radius:24px;padding:18px;background:rgba(255,255,255,.05);">
+        <div style="color:#7df9ff;font-size:12px;font-weight:900;letter-spacing:.08em;">④ ENERGY</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">能量提升</h2>
+        <p style="margin:0;color:#dbe5ff;line-height:1.65;"><b>晨间启动动作：</b>{html.escape(energy_task["task"])}</p>
+      </div>
+
+      <div style="border:1px solid rgba(99,243,166,.24);border-radius:24px;padding:18px;background:rgba(99,243,166,.07);">
+        <div style="color:#63f3a6;font-size:12px;font-weight:900;letter-spacing:.08em;">⑤ READING TREE</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">阅读系统</h2>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日书籍：</b>《{html.escape(reading["book"])}》</p>
+        <p style="margin:0;color:#96a2bf;line-height:1.65;"><b>今日章节：</b>第 {reading["chapter"]} 章｜{html.escape(reading_task["time"])}</p>
+      </div>
+
+      <div style="border:1px solid rgba(255,211,122,.24);border-radius:24px;padding:18px;background:rgba(255,211,122,.07);">
+        <div style="color:#ffd37a;font-size:12px;font-weight:900;letter-spacing:.08em;">⑥ ASSET GROWTH</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">财富重建</h2>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>今日赚钱动作：</b>{html.escape(wealth_task["task"])}</p>
+        <p style="margin:0;color:#96a2bf;line-height:1.65;"><b>当前还款目标：</b>{money["current"]:.0f} / {money["target"]:.0f} 元</p>
+      </div>
+
+      <div style="border:1px solid rgba(125,249,255,.22);border-radius:24px;padding:18px;background:rgba(255,255,255,.055);">
+        <div style="color:#7df9ff;font-size:12px;font-weight:900;letter-spacing:.08em;">⑦ XP SYSTEM</div>
+        <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">XP系统</h2>
+        <p style="margin:0 0 8px;color:#dbe5ff;line-height:1.65;"><b>等级：</b>Lv {level}</p>
+        <p style="margin:0 0 10px;color:#dbe5ff;line-height:1.65;"><b>经验值：</b>{current_xp} / {target_xp} XP</p>
+        <div style="height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;">
+          <div style="height:100%;width:{data["completion"]["rate"]}%;border-radius:999px;background:linear-gradient(90deg,#7df9ff,#a979ff,#ffd37a);"></div>
+        </div>
+        <p style="margin:10px 0 0;color:#96a2bf;line-height:1.65;"><b>连续天数：</b>{data["streak"]} 天</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
 
 
-def render_evening_push(today_text: str | None = None) -> str:
-    """晚上推送的23:30复盘表格。"""
-    data = build_dashboard_data(today_text)
-    completion = data["completion"]
-    if completion["rate"] < 100:
-        opening = "今天还没结束，先完成复盘，不要自责，只记录真实情况。"
-    else:
-        opening = "今天已经完成得很好，23:30做最后复盘，把经验留给明天。"
-
-    return "\n\n".join(
-        [
-            opening,
-            f"# 🌙 23:30晚间复盘表格｜{data['today']}",
-            f"今日完成率：{completion['rate']}%（{completion['done_count']} / {completion['total']} 项）",
-            render_markdown_table("evening", data),
-            "风险检查：不借钱、不投资、不合伙、不碰套现、不点陌生赚钱链接、不购买超过100元非必需品。",
-            "打开本地网页完成打卡：http://127.0.0.1:5000",
-        ]
-    )
+def render_morning_push(today_text: str | None = None) -> str:
+    """早上推送默认使用 REBIRTH RPG OS V2 HTML。"""
+    return render_morning_rpg_push(today_text)
 
 
 def get_night_review(record: Dict[str, Any]) -> Dict[str, Any]:
