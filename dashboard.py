@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import html
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -24,6 +24,7 @@ PROGRESS_PATH = BASE_DIR / "progress.json"
 TASK_POOL_PATH = BASE_DIR / "task_pool.json"
 DASHBOARD_PATH = BASE_DIR / "daily_dashboard.html"
 NIGHT_DASHBOARD_PATH = BASE_DIR / "night_dashboard.html"
+LOCAL_TZ = timezone(timedelta(hours=8))
 
 
 DEFAULT_TASK_POOL = {
@@ -103,6 +104,34 @@ def yesterday_text(today_text: str) -> str:
     except ValueError:
         today = date.today()
     return (today - timedelta(days=1)).isoformat()
+
+
+def local_today_text() -> str:
+    """返回北京时间日期，避免云端 UTC 把早晨推送算成前一天。"""
+    return datetime.now(LOCAL_TZ).date().isoformat()
+
+
+def plan_day_from_start(config: Dict[str, Any], today_text: str) -> int:
+    """根据 START_DATE 自动计算今天是重塑计划第几天。"""
+    try:
+        start = date.fromisoformat(str(config.get("START_DATE", "2026-05-25")))
+        current = date.fromisoformat(today_text)
+    except ValueError:
+        return 1
+    return max((current - start).days + 1, 1)
+
+
+def auto_python_day(config: Dict[str, Any], today_text: str) -> int:
+    """Python 学习日自动随日期增长，也保留手动配置作为最低起点。"""
+    configured_day = int(config.get("PYTHON_DAY", 1) or 1)
+    return max(configured_day, plan_day_from_start(config, today_text))
+
+
+def auto_book_chapter(config: Dict[str, Any], today_text: str) -> int:
+    """阅读章节自动推进：默认每7天进入下一章。"""
+    configured_chapter = int(config.get("BOOK_CHAPTER", 1) or 1)
+    auto_chapter = (plan_day_from_start(config, today_text) - 1) // 7 + 1
+    return max(configured_chapter, auto_chapter)
 
 
 def get_all_task_ids() -> List[str]:
@@ -255,9 +284,9 @@ def get_task_sections(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     config = data["config"]
     seed = data["seed"]
     level = data["dynamic_level"]
-    python_day = int(config.get("PYTHON_DAY", 1) or 1)
+    python_day = int(data["ai"]["day"])
     book_name = config.get("BOOK_NAME", "终身成长")
-    book_chapter = int(config.get("BOOK_CHAPTER", 1) or 1)
+    book_chapter = int(data["reading"]["chapter"])
 
     ai_task = pick_task(pool, "ai_learning_tasks", seed + python_day)
     ai_duration = "40分钟"
@@ -416,7 +445,7 @@ def section_rates(sections: List[Dict[str, Any]], record: Dict[str, Any]) -> Dic
 
 def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
     """组装网页、静态HTML和推送都要用的数据。"""
-    today_text = today_text or date.today().isoformat()
+    today_text = today_text or local_today_text()
     config = read_json(CONFIG_PATH, {})
     progress = read_json(PROGRESS_PATH, {})
     record = normalize_record(progress.get(today_text, {}))
@@ -432,9 +461,13 @@ def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
         if isinstance(item, dict)
     )
     current_money = base_money + income_from_progress
+    plan_day = plan_day_from_start(config, today_text)
+    python_day = auto_python_day(config, today_text)
+    book_chapter = auto_book_chapter(config, today_text)
 
     data: Dict[str, Any] = {
         "today": today_text,
+        "plan_day": plan_day,
         "seed": date.fromisoformat(today_text).toordinal(),
         "goal": "按8:00-9:30完成早晨启动，白天只做轻任务，晚上完成项目、阅读和复盘。",
         "config": config,
@@ -453,17 +486,17 @@ def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
             "percent": percent(current_money, target_money),
         },
         "ai": {
-            "day": int(config.get("PYTHON_DAY", 1) or 1),
+            "day": python_day,
             "target": 365,
-            "percent": percent(float(config.get("PYTHON_DAY", 1) or 1), 365),
+            "percent": percent(float(python_day), 365),
             "teacher": str(config.get("AI_COURSE_TEACHER", "吴恩达 Andrew Ng") or "吴恩达 Andrew Ng"),
             "course_name": str(config.get("AI_COURSE_NAME", "AI 与 Python 基础能力课") or "AI 与 Python 基础能力课"),
         },
         "reading": {
             "book": config.get("BOOK_NAME", "终身成长"),
-            "chapter": int(config.get("BOOK_CHAPTER", 1) or 1),
+            "chapter": book_chapter,
             "target": 12,
-            "percent": percent(float(config.get("BOOK_CHAPTER", 1) or 1), 12),
+            "percent": percent(float(book_chapter), 12),
         },
     }
     data["sections"] = get_task_sections(data)
@@ -471,6 +504,96 @@ def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
     completion["section_rates"] = section_rates(data["sections"], record)
     data["completion"] = completion
     return data
+
+
+def task_label_map_for_day(day_text: str) -> Dict[str, str]:
+    """返回某一天的任务 ID 到任务名称映射，用于历史记录展示。"""
+    data = build_dashboard_data(day_text)
+    labels: Dict[str, str] = {}
+    for section in data["sections"]:
+        for task in section["tasks"]:
+            labels[task["id"]] = short_task_name(task)
+    return labels
+
+
+def summarize_history(records: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
+    """统计最近 N 天的成长数据。"""
+    if not records:
+        return {
+            "days": days,
+            "checkin_days": 0,
+            "avg_rate": 0,
+            "ai_done": 0,
+            "reading_done": 0,
+            "wealth_done": 0,
+            "income": 0,
+            "avg_mood": 0,
+        }
+
+    recent = records[-days:]
+    checkin_days = len(recent)
+    return {
+        "days": days,
+        "checkin_days": checkin_days,
+        "avg_rate": round(sum(item["rate"] for item in recent) / checkin_days) if checkin_days else 0,
+        "ai_done": sum(1 for item in recent if item["ai_learning"]),
+        "reading_done": sum(1 for item in recent if item["reading"]),
+        "wealth_done": sum(1 for item in recent if item["wealth_action"]),
+        "income": round(sum(float(item["income_today"] or 0) for item in recent), 2),
+        "avg_mood": round(sum(int(item["mood_score"] or 0) for item in recent) / checkin_days, 1) if checkin_days else 0,
+    }
+
+
+def build_growth_history_data(today_text: str | None = None) -> Dict[str, Any]:
+    """构建成长记录页数据：不是只看今天，而是保留长期轨迹。"""
+    today_text = today_text or local_today_text()
+    progress = read_json(PROGRESS_PATH, {})
+    records: List[Dict[str, Any]] = []
+
+    for day_text in sorted(progress.keys()):
+        raw_record = progress.get(day_text, {})
+        if not isinstance(raw_record, dict):
+            continue
+
+        record = normalize_record(raw_record)
+        completion = task_completion_from_record(record)
+        labels = task_label_map_for_day(day_text)
+        task_notes = []
+        for task_id, status in record.get("tasks", {}).items():
+            note = str(status.get("note", "")).strip() if isinstance(status, dict) else ""
+            if note:
+                task_notes.append(
+                    {
+                        "task": labels.get(task_id, task_id),
+                        "note": note,
+                    }
+                )
+
+        records.append(
+            {
+                "date": day_text,
+                "done_count": completion["done_count"],
+                "total": completion["total"],
+                "rate": completion["rate"],
+                "mood_score": record.get("mood_score", 7),
+                "income_today": record.get("income_today", 0),
+                "note": str(record.get("note", "")).strip(),
+                "ai_learning": bool(record.get("ai_learning", False)),
+                "reading": bool(record.get("reading", False)),
+                "wealth_action": bool(record.get("wealth_action", False)),
+                "no_risky_money_behavior": bool(record.get("no_risky_money_behavior", True)),
+                "task_notes": task_notes,
+            }
+        )
+
+    return {
+        "today": today_text,
+        "records": records,
+        "total_days": len(records),
+        "streak": calculate_streak(progress, today_text),
+        "week": summarize_history(records, 7),
+        "month": summarize_history(records, 30),
+    }
 
 
 def get_task_status(data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
@@ -931,6 +1054,8 @@ def render_dashboard_html(
           <span>10:00 上班</span>
           <span>19:00 下班</span>
           <span>23:30 结算</span>
+          <a href="/history">成长记录</a>
+          <a href="/night">晚间结算</a>
         </div>
       </div>
       <div class="hero-orbit">
@@ -956,6 +1081,144 @@ def render_dashboard_html(
       </section>
       {extra_fields}
     {form_end}
+  </main>
+</body>
+</html>
+"""
+
+
+def render_growth_history_html(
+    data: Dict[str, Any],
+    css_href: str = "dashboard.css",
+) -> str:
+    """生成成长记录页：展示每日记录、周复盘、月复盘。"""
+    records = data["records"]
+    recent_records = list(reversed(records[-30:]))
+    week = data["week"]
+    month = data["month"]
+
+    def stat_card(label: str, value: str, tone: str = "") -> str:
+        return f"""
+          <div class="history-stat {html.escape(tone)}">
+            <span>{html.escape(label)}</span>
+            <strong>{html.escape(value)}</strong>
+          </div>
+        """
+
+    def summary_block(title: str, summary: Dict[str, Any]) -> str:
+        return f"""
+          <section class="glass-card history-summary">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">REVIEW</span>
+                <h2>{html.escape(title)}</h2>
+              </div>
+              <span class="boss-reward">{summary["avg_rate"]}% AVG</span>
+            </div>
+            <div class="history-stat-grid">
+              {stat_card("打卡天数", f'{summary["checkin_days"]} / {summary["days"]}')}
+              {stat_card("AI完成", f'{summary["ai_done"]} 天', "cyan")}
+              {stat_card("阅读完成", f'{summary["reading_done"]} 天', "green")}
+              {stat_card("财富行动", f'{summary["wealth_done"]} 天', "gold")}
+              {stat_card("累计收入", f'{summary["income"]} 元', "gold")}
+              {stat_card("平均情绪", f'{summary["avg_mood"]} / 10', "purple")}
+            </div>
+          </section>
+        """
+
+    if recent_records:
+        record_cards = []
+        for item in recent_records:
+            notes_html = ""
+            if item["task_notes"]:
+                notes_html = "".join(
+                    f'<li><strong>{html.escape(note["task"])}</strong>：{html.escape(note["note"])}</li>'
+                    for note in item["task_notes"][:4]
+                )
+                notes_html = f'<ul class="history-task-notes">{notes_html}</ul>'
+
+            daily_note = html.escape(item["note"]) if item["note"] else "今天还没有写总备注。"
+            record_cards.append(
+                f"""
+                <article class="history-day-card">
+                  <div class="history-day-head">
+                    <div>
+                      <span>{html.escape(item["date"])}</span>
+                      <h3>{item["rate"]}% CLEAR</h3>
+                    </div>
+                    <strong>{item["done_count"]} / {item["total"]}</strong>
+                  </div>
+                  <div class="history-tags">
+                    <span class="{'is-on' if item['ai_learning'] else ''}">AI</span>
+                    <span class="{'is-on' if item['reading'] else ''}">阅读</span>
+                    <span class="{'is-on' if item['wealth_action'] else ''}">财富</span>
+                    <span class="{'is-on' if item['no_risky_money_behavior'] else ''}">风险安全</span>
+                  </div>
+                  <div class="meter-track history-meter">
+                    <div class="meter-fill" style="width:{item["rate"]}%"></div>
+                  </div>
+                  <div class="history-mini">
+                    <span>情绪 {item["mood_score"]}/10</span>
+                    <span>收入 {item["income_today"]} 元</span>
+                  </div>
+                  <p class="history-note">{daily_note}</p>
+                  {notes_html}
+                </article>
+                """
+            )
+        records_html = "\n".join(record_cards)
+    else:
+        records_html = """
+          <section class="glass-card history-empty">
+            <h2>还没有成长记录</h2>
+            <p>完成今天第一次打卡后，这里会自动出现你的成长轨迹。</p>
+          </section>
+        """
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>赵皓阳 REBIRTH 成长记录</title>
+  <link rel="stylesheet" href="{html.escape(css_href)}">
+</head>
+<body>
+  <main class="os-shell history-shell">
+    <section class="command-hero history-hero">
+      <div class="hero-copy">
+        <span class="system-pill">REBIRTH ARCHIVE / {html.escape(data["today"])}</span>
+        <h1>成长记录</h1>
+        <p>这里不是重新开始。这里保存每天的行动证据，用来做一周复盘、一个月复盘，看见自己真的在变。</p>
+        <div class="timeline-strip">
+          <a href="/">今日打卡</a>
+          <a href="/night">晚间结算</a>
+        </div>
+      </div>
+      <div class="hero-orbit">
+        <span>CHECK-IN DAYS</span>
+        <strong>{data["total_days"]}</strong>
+        <small>连续 {data["streak"]} 天</small>
+      </div>
+    </section>
+
+    <section class="history-review-grid">
+      {summary_block("最近7天复盘", week)}
+      {summary_block("最近30天复盘", month)}
+    </section>
+
+    <section class="glass-card history-list-card">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">DAILY ARCHIVE</span>
+          <h2>每日成长轨迹</h2>
+        </div>
+        <span class="tiny-badge">最近30天</span>
+      </div>
+      <div class="history-list">
+        {records_html}
+      </div>
+    </section>
   </main>
 </body>
 </html>
@@ -996,7 +1259,7 @@ def render_morning_rpg_push(today_text: str | None = None) -> str:
     <div style="border:1px solid rgba(125,249,255,.22);border-radius:26px;padding:24px;background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.04));box-shadow:0 20px 60px rgba(0,0,0,.35);">
       <div style="display:inline-block;padding:7px 11px;border:1px solid rgba(125,249,255,.32);border-radius:999px;color:#7df9ff;background:rgba(125,249,255,.08);font-size:12px;font-weight:800;letter-spacing:.08em;">REBIRTH RPG OS V2</div>
       <h1 style="margin:16px 0 8px;font-size:34px;line-height:1.05;color:#fff;">赵皓阳 · 今日人生控制台</h1>
-      <p style="margin:0;color:#96a2bf;line-height:1.7;">{html.escape(data["today"])}｜08:00 起床｜10:00 上班｜今天不是打卡，是升级。</p>
+      <p style="margin:0;color:#96a2bf;line-height:1.7;">{html.escape(data["today"])}｜计划第 {data["plan_day"]} 天｜08:00 起床｜10:00 上班｜今天不是打卡，是升级。</p>
     </div>
 
     <div style="margin-top:14px;display:grid;gap:12px;">
@@ -1085,7 +1348,7 @@ def render_morning_serverchan_push(today_text: str | None = None) -> str:
         [
             "# REBIRTH RPG OS V2｜大怪升级人生控制台",
             "今天按 RPG 主线推进：打怪、拿 XP、升级。",
-            f"日期：{data['today']}｜Lv {level}｜连续 {data['streak']} 天｜今日XP {xp_today}",
+            f"日期：{data['today']}｜计划第 {data['plan_day']} 天｜Lv {level}｜连续 {data['streak']} 天｜今日XP {xp_today}",
             "## ① 今日主线任务",
             f"主线目标：{short_task_name(main_task)}",
             f"今日第一步：{main_task['task']}",

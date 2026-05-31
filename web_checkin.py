@@ -24,11 +24,13 @@ except ImportError:
 
 from dashboard import (
     PROGRESS_PATH,
+    build_growth_history_data,
     build_dashboard_data,
     get_all_task_ids,
     get_night_review,
     normalize_record,
     render_dashboard_html,
+    render_growth_history_html,
     render_night_dashboard_html,
     save_daily_dashboard,
     save_night_dashboard,
@@ -109,6 +111,13 @@ def index():
         css_href="/dashboard.css",
     )
     return html
+
+
+@app.route("/history")
+def history():
+    """成长记录页：查看历史打卡、一周复盘、月复盘。"""
+    data = build_growth_history_data(today_text())
+    return render_growth_history_html(data, css_href="/dashboard.css")
 
 
 @app.route("/night", methods=["GET", "POST"])

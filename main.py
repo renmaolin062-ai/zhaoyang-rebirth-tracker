@@ -17,7 +17,7 @@ import json
 import smtplib
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -45,6 +45,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 PROGRESS_PATH = BASE_DIR / "progress.json"
 LOGS_DIR = BASE_DIR / "logs"
+LOCAL_TZ = timezone(timedelta(hours=8))
 
 
 def make_console_utf8() -> None:
@@ -159,8 +160,8 @@ def load_config() -> Dict[str, Any]:
 
 
 def get_today() -> str:
-    """返回今天日期，例如：2026-05-25。"""
-    return date.today().isoformat()
+    """返回北京时间日期，例如：2026-05-25。"""
+    return datetime.now(LOCAL_TZ).date().isoformat()
 
 
 def get_current_stage(config: Dict[str, Any], today_text: str) -> str:
@@ -421,7 +422,7 @@ def calculate_stats() -> Dict[str, Any]:
     progress = load_json(PROGRESS_PATH, {})
 
     total_days = len(progress)
-    today_date = date.today()
+    today_date = datetime.now(LOCAL_TZ).date()
     streak = 0
 
     while True:
