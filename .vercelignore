@@ -1,3 +1,6 @@
+﻿# Vercel only hosts the cloud mobile page and Node API.
+# The Python files are for local use and GitHub Actions push jobs.
+
 .github
 __pycache__
 logs
