@@ -141,6 +141,7 @@ def load_config() -> Dict[str, Any]:
         "SERVERCHAN_SENDKEY",
         "PUSHPLUS_TOKEN",
         "NIGHT_DASHBOARD_PUBLIC_URL",
+        "MOBILE_REVIEW_PUBLIC_URL",
         "EMAIL_ENABLED",
         "EMAIL_SMTP_HOST",
         "EMAIL_SMTP_PORT",

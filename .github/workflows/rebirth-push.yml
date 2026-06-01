@@ -67,6 +67,7 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           NIGHT_DASHBOARD_PUBLIC_URL: ${{ secrets.NIGHT_DASHBOARD_PUBLIC_URL }}
+          MOBILE_REVIEW_PUBLIC_URL: ${{ secrets.MOBILE_REVIEW_PUBLIC_URL }}
         run: |
           cd "$PROJECT_DIR"
           HOUR=$(date -u +"%H")

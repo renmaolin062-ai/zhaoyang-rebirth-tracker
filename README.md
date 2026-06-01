@@ -406,3 +406,83 @@ night
 3. 邮箱
 
 如果 Server酱成功，就会直接推送到微信；如果失败，会自动尝试 PushPlus；如果都失败，会在 Actions 日志里打印失败原因。
+
+## 14. 手机云端复盘：电脑关机也能填写
+
+本地地址 `127.0.0.1` 只能在电脑开机时访问。电脑一关机，手机就打不开。
+
+所以项目新增了一套云端手机复盘页：
+
+```text
+/mobile
+/m
+```
+
+部署到 Vercel 后，手机可以直接打开：
+
+```text
+https://你的项目名.vercel.app/mobile
+```
+
+这个页面会把复盘内容写回 GitHub 仓库里的 `progress.json`，所以电脑关机也能记录。
+
+### 需要新增的 Vercel 环境变量
+
+进入 Vercel 项目：`Settings` -> `Environment Variables`，添加：
+
+```text
+PROGRESS_GITHUB_TOKEN
+PROGRESS_REPO
+PROGRESS_BRANCH
+PROGRESS_FILE
+```
+
+推荐填写：
+
+```text
+PROGRESS_REPO=renmaolin062-ai/zhaoyang-rebirth-tracker
+PROGRESS_BRANCH=main
+PROGRESS_FILE=progress.json
+```
+
+`PROGRESS_GITHUB_TOKEN` 需要在 GitHub 创建 Fine-grained token，只给当前仓库授权，并开启：
+
+```text
+Contents: Read and write
+```
+
+不要把这个 token 写进代码，也不要发给别人。
+
+### 让晚间微信推送直接打开手机复盘页
+
+GitHub 仓库里进入：`Settings` -> `Secrets and variables` -> `Actions`，新增：
+
+```text
+MOBILE_REVIEW_PUBLIC_URL
+```
+
+值填写：
+
+```text
+https://你的项目名.vercel.app/mobile
+```
+
+之后 23:30 的微信推送会优先显示这个手机复盘入口。
+
+### 测试方法
+
+浏览器打开：
+
+```text
+https://你的项目名.vercel.app/api/health
+```
+
+如果看到 `ok: true`，说明云端函数正常。
+
+再打开：
+
+```text
+https://你的项目名.vercel.app/mobile
+```
+
+填写后点击“保存今晚复盘”，然后回 GitHub 查看 `progress.json` 是否更新。

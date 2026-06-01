@@ -1,0 +1,17 @@
+{
+  "rewrites": [
+    {
+      "source": "/mobile",
+      "destination": "/mobile.html"
+    },
+    {
+      "source": "/m",
+      "destination": "/mobile.html"
+    }
+  ],
+  "functions": {
+    "api/cloud-review.js": {
+      "maxDuration": 20
+    }
+  }
+}

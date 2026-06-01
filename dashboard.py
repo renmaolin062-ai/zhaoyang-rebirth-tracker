@@ -1791,6 +1791,132 @@ def render_night_dashboard_html(
 """
 
 
+def render_mobile_review_html(
+    data: Dict[str, Any],
+    editable: bool = True,
+    saved: bool = False,
+    css_href: str = "dashboard.css",
+) -> str:
+    """生成手机专用复盘页，字段仍写入同一份 progress.json。"""
+    record = data["record"]
+    review = get_night_review(record)
+    completion = data["completion"]
+    level = max(1, data["streak"] + 1)
+    xp_today = completion["xp_today"]
+    mood_score = int(record.get("mood_score", 7) or 7)
+    ai_task = find_task(data, "morning_ai_learning")
+    reading_task = find_task(data, "evening_reading")
+
+    saved_html = '<div class="mobile-toast">已保存今晚复盘</div>' if saved else ""
+    form_start = '<form method="post">' if editable else ""
+    form_end = "</form>" if editable else ""
+    mood_control = (
+        f'<input type="range" min="1" max="10" name="mood_score" value="{mood_score}">'
+        if editable
+        else f'<p class="night-answer">{mood_score} / 10</p>'
+    )
+    minimum_checked = "checked" if review["minimum_version_done"] else ""
+    minimum_control = (
+        f'<label class="mobile-toggle"><input type="checkbox" name="minimum_version_done" {minimum_checked}><span>今天完成最低版本了吗？</span></label>'
+        if editable
+        else f'<p class="night-answer">{done_text(review["minimum_version_done"])}</p>'
+    )
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>手机复盘｜REBIRTH RPG OS</title>
+  <link rel="stylesheet" href="{html.escape(css_href)}">
+</head>
+<body class="mobile-review-body">
+  <main class="mobile-review-shell">
+    <section class="mobile-review-hero">
+      <span class="system-pill">MOBILE REVIEW / 23:30</span>
+      <h1>今晚结算</h1>
+      <p>{html.escape(data["today"])} · 手机复盘模式。真实记录，不自责。</p>
+      <div class="mobile-hero-stats">
+        <div><span>Lv</span><strong>{level}</strong></div>
+        <div><span>XP</span><strong>{xp_today}</strong></div>
+        <div><span>完成率</span><strong>{completion["rate"]}%</strong></div>
+      </div>
+    </section>
+
+    {saved_html}
+
+    {form_start}
+      <section class="mobile-review-card mobile-main-card">
+        <span class="panel-kicker">BATTLE RESULT</span>
+        <h2>今日战果</h2>
+        <div class="mobile-result-grid">
+          {render_result_line("今日XP", f"{xp_today} XP")}
+          {render_result_line("任务完成", f'{completion["done_count"]} / {completion["total"]}')}
+          {render_result_line("连续天数", f'{data["streak"]} 天')}
+        </div>
+      </section>
+
+      <section class="mobile-review-card">
+        <span class="panel-kicker">AI ACADEMY</span>
+        <h2>AI 复盘</h2>
+        <div class="result-board">
+          {render_result_line("今日老师", data["ai"]["teacher"])}
+          {render_result_line("今日课程", short_task_name(ai_task))}
+          {render_result_line("学习时间", ai_task["time"])}
+        </div>
+        {render_night_field("今日认知", "ai_cognition", review["ai_cognition"], editable, "今天对AI/Python多理解了什么？")}
+        {render_night_field("今日实操", "ai_practice", review["ai_practice"], editable, "今天动手做了什么？")}
+        {render_night_field("今日输出成果", "ai_output", review["ai_output"], editable, "产出了代码、笔记、想法还是作品？")}
+      </section>
+
+      {render_merit_table(data, editable)}
+
+      <section class="mobile-review-card">
+        <span class="panel-kicker">READING TREE</span>
+        <h2>阅读复盘</h2>
+        <div class="result-board">
+          {render_result_line("今日书籍", f'《{data["reading"]["book"]}》第{data["reading"]["chapter"]}章')}
+          {render_result_line("阅读任务", short_task_name(reading_task))}
+        </div>
+        {render_night_field("页数", "reading_pages", review["reading_pages"], editable, "例如：12页")}
+        {render_night_field("一句最重要认知", "reading_insight", review["reading_insight"], editable, "不用漂亮，真实即可。")}
+      </section>
+
+      <section class="mobile-review-card">
+        <span class="panel-kicker">BOSS SUMMARY</span>
+        <h2>Boss 战总结</h2>
+        {render_night_field("今天最强动作", "strongest_action", review["strongest_action"], editable, "今天哪一个动作最像在升级？")}
+        {render_night_field("今天最大卡点", "biggest_blocker", review["biggest_blocker"], editable, "卡在哪里，不解释，不自责。")}
+        {render_night_field("今天学到的最重要东西", "most_important_learning", review["most_important_learning"], editable, "一句话就够。")}
+        {render_night_field("明天第一步", "tomorrow_first_step", review["tomorrow_first_step"], editable, "明天起床后先做什么？")}
+      </section>
+
+      <section class="mobile-review-card">
+        <span class="panel-kicker">REAL STATUS</span>
+        <h2>情绪区</h2>
+        <label class="night-field mobile-mood">
+          <span>今日状态打分：{mood_score} / 10</span>
+          {mood_control}
+        </label>
+        {render_night_field("今日一句真实感受", "real_feeling", review["real_feeling"], editable, "不要鸡汤。真实即可。")}
+      </section>
+
+      <section class="mobile-review-card low-energy-card">
+        <span class="panel-kicker">LOW ENERGY MODE</span>
+        <h2>低能量模式</h2>
+        <p class="soft-copy">如果今天很累，只写最低版本也算完成结算。</p>
+        {minimum_control}
+        {render_night_field("今天最想感谢自己的1件事", "self_thanks", review["self_thanks"], editable, "哪怕很小也可以。")}
+      </section>
+
+      {'<button class="mobile-submit" type="submit">保存今晚复盘</button>' if editable else ''}
+    {form_end}
+  </main>
+</body>
+</html>
+"""
+
+
 def save_night_dashboard(today_text: str | None = None) -> Path:
     """生成 night_dashboard.html。"""
     data = build_dashboard_data(today_text)
@@ -1808,11 +1934,13 @@ def render_night_push(today_text: str | None = None) -> str:
     record = data["record"]
     review = get_night_review(record)
     summary = review["real_feeling"] or "今天打完怪，先结算，不自责。"
-    public_url = str(config.get("NIGHT_DASHBOARD_PUBLIC_URL", "")).strip()
+    public_url = str(config.get("MOBILE_REVIEW_PUBLIC_URL", "")).strip()
+    if not public_url:
+        public_url = str(config.get("NIGHT_DASHBOARD_PUBLIC_URL", "")).strip()
     if public_url:
-        button = f"[【查看完整结算面板】]({public_url})"
+        button = f"[【手机复盘入口】]({public_url})"
     else:
-        button = "【查看完整结算面板】请先配置 config.json 里的 NIGHT_DASHBOARD_PUBLIC_URL。"
+        button = "【手机复盘入口】请先配置 MOBILE_REVIEW_PUBLIC_URL。"
 
     return "\n\n".join(
         [

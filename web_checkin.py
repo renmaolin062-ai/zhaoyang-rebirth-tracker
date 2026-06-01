@@ -11,6 +11,7 @@ http://127.0.0.1:5000
 from __future__ import annotations
 
 import json
+import socket
 import sys
 from datetime import date
 from typing import Any, Dict
@@ -33,6 +34,7 @@ from dashboard import (
     normalize_record,
     render_dashboard_html,
     render_growth_history_html,
+    render_mobile_review_html,
     render_night_dashboard_html,
     save_daily_dashboard,
     save_night_dashboard,
@@ -60,6 +62,16 @@ app = Flask(__name__)
 def today_text() -> str:
     """返回今天日期。"""
     return date.today().isoformat()
+
+
+def get_lan_ip() -> str:
+    """Return this computer's LAN IP for phone access on the same Wi-Fi."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
 
 
 def parse_float(value: str | None, default: float = 0) -> float:
@@ -93,6 +105,27 @@ def update_merit_table_from_form(record: Dict[str, Any]) -> None:
     table["improvement_needed"] = request.form.get("merit_improvement_needed", "").strip()
     table["tomorrow_fix"] = request.form.get("merit_tomorrow_fix", "").strip()
     record["merit_table"] = table
+
+
+def update_night_review_from_form(record: Dict[str, Any]) -> None:
+    """Save night review form fields into today's record."""
+    review = get_night_review(record)
+    review["strongest_action"] = request.form.get("strongest_action", "").strip()
+    review["biggest_blocker"] = request.form.get("biggest_blocker", "").strip()
+    review["most_important_learning"] = request.form.get("most_important_learning", "").strip()
+    review["tomorrow_first_step"] = request.form.get("tomorrow_first_step", "").strip()
+    review["real_feeling"] = request.form.get("real_feeling", "").strip()
+    review["minimum_version_done"] = request.form.get("minimum_version_done") == "on"
+    review["self_thanks"] = request.form.get("self_thanks", "").strip()
+    review["reading_pages"] = request.form.get("reading_pages", "").strip()
+    review["reading_insight"] = request.form.get("reading_insight", "").strip()
+    review["ai_cognition"] = request.form.get("ai_cognition", "").strip()
+    review["ai_practice"] = request.form.get("ai_practice", "").strip()
+    review["ai_output"] = request.form.get("ai_output", "").strip()
+    record["night_review"] = review
+    record["mood_score"] = parse_int(request.form.get("mood_score"), record.get("mood_score", 7))
+    update_merit_table_from_form(record)
+    update_summary_fields(record)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -146,23 +179,7 @@ def night():
 
     if request.method == "POST":
         record = normalize_record(progress.get(today, {}))
-        review = get_night_review(record)
-        review["strongest_action"] = request.form.get("strongest_action", "").strip()
-        review["biggest_blocker"] = request.form.get("biggest_blocker", "").strip()
-        review["most_important_learning"] = request.form.get("most_important_learning", "").strip()
-        review["tomorrow_first_step"] = request.form.get("tomorrow_first_step", "").strip()
-        review["real_feeling"] = request.form.get("real_feeling", "").strip()
-        review["minimum_version_done"] = request.form.get("minimum_version_done") == "on"
-        review["self_thanks"] = request.form.get("self_thanks", "").strip()
-        review["reading_pages"] = request.form.get("reading_pages", "").strip()
-        review["reading_insight"] = request.form.get("reading_insight", "").strip()
-        review["ai_cognition"] = request.form.get("ai_cognition", "").strip()
-        review["ai_practice"] = request.form.get("ai_practice", "").strip()
-        review["ai_output"] = request.form.get("ai_output", "").strip()
-        record["night_review"] = review
-        record["mood_score"] = parse_int(request.form.get("mood_score"), record.get("mood_score", 7))
-        update_merit_table_from_form(record)
-        update_summary_fields(record)
+        update_night_review_from_form(record)
 
         progress[today] = record
         write_json(PROGRESS_PATH, progress)
@@ -179,6 +196,31 @@ def night():
     return html
 
 
+@app.route("/mobile", methods=["GET", "POST"])
+@app.route("/m", methods=["GET", "POST"])
+def mobile_review():
+    """Phone-friendly local review page. Cloud review uses Vercel /mobile."""
+    today = today_text()
+    progress = load_json(PROGRESS_PATH, {})
+
+    if request.method == "POST":
+        record = normalize_record(progress.get(today, {}))
+        update_night_review_from_form(record)
+
+        progress[today] = record
+        write_json(PROGRESS_PATH, progress)
+        save_night_dashboard(today)
+        return redirect(url_for("mobile_review", saved="1"))
+
+    data = build_dashboard_data(today)
+    return render_mobile_review_html(
+        data,
+        editable=True,
+        saved=request.args.get("saved") == "1",
+        css_href="/dashboard.css",
+    )
+
+
 @app.route("/dashboard.css")
 def dashboard_css():
     css_path = PROGRESS_PATH.parent / "dashboard.css"
@@ -191,7 +233,9 @@ if __name__ == "__main__":
 
     save_daily_dashboard(today_text())
     save_night_dashboard(today_text())
+    lan_ip = get_lan_ip()
     print("本地网页每日监督表格已启动。")
     print("请打开：http://127.0.0.1:5000")
     print("晚间结算：http://127.0.0.1:5000/night")
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    print(f"手机同一 Wi-Fi 复盘：http://{lan_ip}:5000/mobile")
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
