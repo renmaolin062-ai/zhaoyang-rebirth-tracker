@@ -26,6 +26,30 @@ DASHBOARD_PATH = BASE_DIR / "daily_dashboard.html"
 NIGHT_DASHBOARD_PATH = BASE_DIR / "night_dashboard.html"
 LOCAL_TZ = timezone(timedelta(hours=8))
 
+MERIT_ITEMS = [
+    ("filial_peace", "孝顺父母 / 让父母安心"),
+    ("ai_learning", "完成AI学习"),
+    ("main_quest", "完成主线任务"),
+    ("controlled_spending", "控制冲动消费"),
+    ("reading_growth", "阅读成长"),
+    ("energy_exercise", "运动 / 能量提升"),
+    ("gentle_speech", "说话温和"),
+    ("help_others", "帮助别人"),
+    ("review_improve", "复盘改过"),
+]
+
+FAULT_ITEMS = [
+    ("delay_escape", "拖延逃避"),
+    ("impulsive_spending", "冲动消费"),
+    ("quick_comeback", "想快速翻盘"),
+    ("emotional_outburst", "情绪失控"),
+    ("impatient_parents", "对父母不耐烦"),
+    ("stay_up_late", "熬夜伤身"),
+    ("money_link", "点开赚钱诱惑链接"),
+    ("complain_fate", "怨天尤人"),
+    ("miss_minimum", "没有完成最低版本"),
+]
+
 
 DEFAULT_TASK_POOL = {
     "manifestation_tasks": [
@@ -160,10 +184,63 @@ def default_task_status() -> Dict[str, Dict[str, Any]]:
     return {task_id: {"done": False, "note": ""} for task_id in get_all_task_ids()}
 
 
+def default_merit_table() -> Dict[str, Any]:
+    """《了凡四训》功过表默认结构。"""
+    return {
+        "merits": {item_id: False for item_id, _ in MERIT_ITEMS},
+        "faults": {item_id: False for item_id, _ in FAULT_ITEMS},
+        "improvement_needed": "",
+        "tomorrow_fix": "",
+    }
+
+
+def normalize_merit_table(raw_table: Any) -> Dict[str, Any]:
+    """兼容缺失字段，补齐功过表。"""
+    table = default_merit_table()
+    if not isinstance(raw_table, dict):
+        return table
+
+    raw_merits = raw_table.get("merits", {})
+    if isinstance(raw_merits, dict):
+        for item_id, _ in MERIT_ITEMS:
+            table["merits"][item_id] = bool(raw_merits.get(item_id, False))
+
+    raw_faults = raw_table.get("faults", {})
+    if isinstance(raw_faults, dict):
+        for item_id, _ in FAULT_ITEMS:
+            table["faults"][item_id] = bool(raw_faults.get(item_id, False))
+
+    table["improvement_needed"] = str(raw_table.get("improvement_needed", ""))
+    table["tomorrow_fix"] = str(raw_table.get("tomorrow_fix", ""))
+    return table
+
+
+def calculate_merit_stats(record: Dict[str, Any]) -> Dict[str, int]:
+    """计算今日功、今日过、今日净功。"""
+    table = normalize_merit_table(record.get("merit_table", {}))
+    merit_count = sum(1 for done in table["merits"].values() if done)
+    fault_count = sum(1 for done in table["faults"].values() if done)
+    return {
+        "merit_count": merit_count,
+        "fault_count": fault_count,
+        "net": merit_count - fault_count,
+    }
+
+
+def cumulative_merit_net(progress: Dict[str, Any]) -> int:
+    """统计 progress.json 里的累计净功。"""
+    total = 0
+    for item in progress.values():
+        if isinstance(item, dict):
+            total += calculate_merit_stats(item)["net"]
+    return total
+
+
 def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
     """兼容旧版 progress.json，并补齐新版任务状态。"""
     normalized = {
         "tasks": default_task_status(),
+        "merit_table": normalize_merit_table(record.get("merit_table", {})),
         "manifestation": bool(record.get("manifestation", False)),
         "energy": bool(record.get("energy", False)),
         "ai_learning": bool(record.get("ai_learning", False)),
@@ -175,6 +252,8 @@ def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
         "income_today": float(record.get("income_today", 0) or 0),
         "note": str(record.get("note", "")),
     }
+    if isinstance(record.get("night_review"), dict):
+        normalized["night_review"] = record["night_review"]
 
     old_tasks = record.get("tasks", {})
     if isinstance(old_tasks, dict):
@@ -502,7 +581,14 @@ def build_dashboard_data(today_text: str | None = None) -> Dict[str, Any]:
     data["sections"] = get_task_sections(data)
     completion = task_completion_from_record(record)
     completion["section_rates"] = section_rates(data["sections"], record)
+    merit_stats = calculate_merit_stats(record)
+    merit_stats["cumulative_net"] = cumulative_merit_net(progress)
+    merit_stats["xp_bonus"] = 20 if merit_stats["net"] > 0 else 0
+    completion["xp_base"] = completion["done_count"] * 30
+    completion["merit_xp_bonus"] = merit_stats["xp_bonus"]
+    completion["xp_today"] = completion["xp_base"] + completion["merit_xp_bonus"]
     data["completion"] = completion
+    data["merit"] = merit_stats
     return data
 
 
@@ -672,6 +758,98 @@ def render_task_control(
     """
 
 
+def render_merit_checkbox(
+    item_id: str,
+    label: str,
+    checked: bool,
+    editable: bool,
+    kind: str,
+) -> str:
+    """渲染功过表单项。"""
+    css_class = "merit-item is-checked" if checked else "merit-item"
+    mark = "+1" if kind == "merit" else "-1"
+    name = f"{kind}_done_{item_id}"
+    if editable:
+        checked_attr = "checked" if checked else ""
+        return f"""
+          <label class="{css_class}">
+            <input type="checkbox" name="{name}" {checked_attr}>
+            <span>{html.escape(label)}</span>
+            <strong>{mark}</strong>
+          </label>
+        """
+    return f"""
+      <div class="{css_class}">
+        <span>{'✓' if checked else '·'} {html.escape(label)}</span>
+        <strong>{mark}</strong>
+      </div>
+    """
+
+
+def render_merit_table(data: Dict[str, Any], editable: bool) -> str:
+    """《了凡四训》功过表模块。"""
+    table = normalize_merit_table(data["record"].get("merit_table", {}))
+    merit = data["merit"]
+    merits_html = "\n".join(
+        render_merit_checkbox(item_id, label, table["merits"].get(item_id, False), editable, "merit")
+        for item_id, label in MERIT_ITEMS
+    )
+    faults_html = "\n".join(
+        render_merit_checkbox(item_id, label, table["faults"].get(item_id, False), editable, "fault")
+        for item_id, label in FAULT_ITEMS
+    )
+    improvement = html.escape(table.get("improvement_needed", ""))
+    tomorrow_fix = html.escape(table.get("tomorrow_fix", ""))
+    bonus_text = "净功为正，额外 +20XP" if merit["xp_bonus"] else "净功大于0时奖励 +20XP"
+
+    if editable:
+        improvement_field = f'<textarea name="merit_improvement_needed" placeholder="今天我最需要改的一件事是...">{improvement}</textarea>'
+        tomorrow_field = f'<textarea name="merit_tomorrow_fix" placeholder="明天我准备怎么改...">{tomorrow_fix}</textarea>'
+    else:
+        improvement_field = f'<p class="night-answer">{improvement or "未记录"}</p>'
+        tomorrow_field = f'<p class="night-answer">{tomorrow_fix or "未记录"}</p>'
+
+    return f"""
+      <section class="glass-card merit-panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-kicker">LIAO FAN LEDGER</span>
+            <h2>📜 功过表｜每日修身</h2>
+          </div>
+          <span class="boss-reward">净功 {merit["net"]}</span>
+        </div>
+        <p class="soft-copy">命由我作，福自己求。不是自责，是把今天的起心动念看清楚。</p>
+        <div class="merit-score-grid">
+          <div><span>今日功</span><strong>+{merit["merit_count"]}</strong></div>
+          <div><span>今日过</span><strong>-{merit["fault_count"]}</strong></div>
+          <div><span>今日净功</span><strong>{merit["net"]}</strong></div>
+          <div><span>累计净功</span><strong>{merit["cumulative_net"]}</strong></div>
+        </div>
+        <div class="merit-columns">
+          <div class="merit-scroll merit-good">
+            <h3>✅ 今日功</h3>
+            {merits_html}
+          </div>
+          <div class="merit-scroll merit-fault">
+            <h3>❌ 今日过</h3>
+            {faults_html}
+          </div>
+        </div>
+        <div class="merit-reflection">
+          <label>
+            今天我最需要改的一件事是：
+            {improvement_field}
+          </label>
+          <label>
+            明天我准备怎么改：
+            {tomorrow_field}
+          </label>
+        </div>
+        <div class="merit-bonus">{html.escape(bonus_text)}</div>
+      </section>
+    """
+
+
 def module_icon(module: str) -> str:
     """给任务模块配图标。"""
     icons = {
@@ -720,7 +898,7 @@ def render_role_panel(data: Dict[str, Any]) -> str:
     level = max(1, data["streak"] + 1)
     energy = min(100, 62 + data["streak"] * 5 + completion["rate"] // 5)
     wealth_level = max(1, data["money"]["percent"] // 10 + 1)
-    xp_value = f'{completion["done_count"] * 30} / {completion["total"] * 30} XP'
+    xp_value = f'{completion["xp_today"]} / {completion["total"] * 30 + 20} XP'
 
     return f"""
       <section class="glass-card role-panel">
@@ -934,7 +1112,7 @@ def render_settlement(data: Dict[str, Any], editable: bool) -> str:
         render_task_control(find_task(data, task_id), get_task_status(data, task_id), editable, "settle-card", "+45 XP")
         for task_id in evening_ids
     ]
-    xp_today = data["completion"]["done_count"] * 30
+    xp_today = data["completion"]["xp_today"]
     return f"""
       <section class="glass-card settlement-panel">
         <div class="panel-head">
@@ -947,7 +1125,7 @@ def render_settlement(data: Dict[str, Any], editable: bool) -> str:
         <div class="settlement-stats">
           <div><span>今日XP</span><strong>{xp_today}</strong></div>
           <div><span>任务完成</span><strong>{data["completion"]["done_count"]}/{data["completion"]["total"]}</strong></div>
-          <div><span>能力增长</span><strong>+4</strong></div>
+          <div><span>修身奖励</span><strong>+{data["completion"]["merit_xp_bonus"]}</strong></div>
         </div>
         <div class="boss-summary">
           <span>Boss总结</span>
@@ -1030,6 +1208,7 @@ def render_dashboard_html(
             render_ai_academy(data, editable),
             render_reading_tree(data, editable),
             render_wealth_assets(data, editable),
+            render_merit_table(data, editable),
             render_settlement(data, editable),
         ]
     )
@@ -1241,7 +1420,7 @@ def render_morning_rpg_push(today_text: str | None = None) -> str:
     wealth_task = find_task(data, "morning_wealth_action")
     reading_task = find_task(data, "evening_reading")
     level = max(1, data["streak"] + 1)
-    current_xp = data["completion"]["done_count"] * 30
+    current_xp = data["completion"]["xp_today"]
     target_xp = data["completion"]["total"] * 30
     money = data["money"]
     ai = data["ai"]
@@ -1294,6 +1473,7 @@ def render_morning_rpg_push(today_text: str | None = None) -> str:
         <div style="color:#7df9ff;font-size:12px;font-weight:900;letter-spacing:.08em;">④ ENERGY</div>
         <h2 style="margin:8px 0 10px;color:#fff;font-size:24px;">能量提升</h2>
         <p style="margin:0;color:#dbe5ff;line-height:1.65;"><b>晨间启动动作：</b>{html.escape(energy_task["task"])}</p>
+        <p style="margin:10px 0 0;color:#ffd37a;line-height:1.65;"><b>今日修身提醒：</b>命由我作，福自己求。今天少一分急，多一分稳。</p>
       </div>
 
       <div style="border:1px solid rgba(99,243,166,.24);border-radius:24px;padding:18px;background:rgba(99,243,166,.07);">
@@ -1364,6 +1544,7 @@ def render_morning_serverchan_push(today_text: str | None = None) -> str:
             "我拥有财富、房子、E300L。",
             "## ④ 能量提升",
             f"晨间启动动作：{energy_task['task']}",
+            "今日修身提醒：命由我作，福自己求。今天少一分急，多一分稳。",
             "## ⑤ 阅读系统",
             f"今日书籍：《{reading['book']}》",
             f"今日章节：第 {reading['chapter']} 章｜{reading_task['time']}",
@@ -1456,7 +1637,7 @@ def render_night_dashboard_html(
     review = get_night_review(record)
     completion = data["completion"]
     level = max(1, data["streak"] + 1)
-    xp_today = completion["done_count"] * 30
+    xp_today = completion["xp_today"]
     mood_score = int(record.get("mood_score", 7) or 7)
     low_energy = mood_score <= 3
 
@@ -1550,6 +1731,8 @@ def render_night_dashboard_html(
           </div>
         </section>
 
+        {render_merit_table(data, editable)}
+
         <section class="glass-card reading-review-card">
           <span class="panel-kicker">READING GROWTH</span>
           <h2>阅读复盘</h2>
@@ -1621,7 +1804,7 @@ def render_night_push(today_text: str | None = None) -> str:
     data = build_dashboard_data(today_text)
     config = data["config"]
     completion = data["completion"]
-    xp_today = completion["done_count"] * 30
+    xp_today = completion["xp_today"]
     record = data["record"]
     review = get_night_review(record)
     summary = review["real_feeling"] or "今天打完怪，先结算，不自责。"
@@ -1638,6 +1821,7 @@ def render_night_push(today_text: str | None = None) -> str:
             f"今日XP：{xp_today}",
             f"任务完成：{completion['done_count']} / {completion['total']}",
             f"一句总结：{summary}",
+            "今晚记得完成功过表复盘，记录真实即可，不自责。",
             button,
         ]
     )

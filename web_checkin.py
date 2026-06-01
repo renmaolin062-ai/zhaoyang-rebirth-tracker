@@ -23,6 +23,8 @@ except ImportError:
     raise SystemExit(1)
 
 from dashboard import (
+    FAULT_ITEMS,
+    MERIT_ITEMS,
     PROGRESS_PATH,
     build_growth_history_data,
     build_dashboard_data,
@@ -77,6 +79,22 @@ def parse_int(value: str | None, default: int = 7) -> int:
     return max(1, min(number, 10))
 
 
+def update_merit_table_from_form(record: Dict[str, Any]) -> None:
+    """把网页里的功过表写入今日记录。"""
+    table = record.get("merit_table", {})
+    table["merits"] = {
+        item_id: request.form.get(f"merit_done_{item_id}") == "on"
+        for item_id, _ in MERIT_ITEMS
+    }
+    table["faults"] = {
+        item_id: request.form.get(f"fault_done_{item_id}") == "on"
+        for item_id, _ in FAULT_ITEMS
+    }
+    table["improvement_needed"] = request.form.get("merit_improvement_needed", "").strip()
+    table["tomorrow_fix"] = request.form.get("merit_tomorrow_fix", "").strip()
+    record["merit_table"] = table
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     today = today_text()
@@ -96,6 +114,7 @@ def index():
         record["mood_score"] = parse_int(request.form.get("mood_score"), 7)
         record["income_today"] = parse_float(request.form.get("income_today"), 0)
         record["note"] = request.form.get("note", "").strip()
+        update_merit_table_from_form(record)
         update_summary_fields(record)
 
         progress[today] = record
@@ -142,6 +161,8 @@ def night():
         review["ai_output"] = request.form.get("ai_output", "").strip()
         record["night_review"] = review
         record["mood_score"] = parse_int(request.form.get("mood_score"), record.get("mood_score", 7))
+        update_merit_table_from_form(record)
+        update_summary_fields(record)
 
         progress[today] = record
         write_json(PROGRESS_PATH, progress)

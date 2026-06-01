@@ -1183,6 +1183,132 @@ textarea {
   margin-top: 16px;
 }
 
+.merit-panel {
+  border-color: rgba(255, 211, 122, 0.30);
+  background:
+    linear-gradient(135deg, rgba(255, 211, 122, 0.10), rgba(255, 255, 255, 0.035)),
+    var(--glass);
+}
+
+.merit-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.merit-score-grid div {
+  border: 1px solid rgba(255, 211, 122, 0.20);
+  border-radius: 18px;
+  padding: 13px;
+  background: rgba(255, 211, 122, 0.06);
+}
+
+.merit-score-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.merit-score-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--gold);
+  font-size: 24px;
+}
+
+.merit-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.merit-scroll {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 15px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.merit-scroll h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.merit-good {
+  border-color: rgba(99, 243, 166, 0.24);
+}
+
+.merit-fault {
+  border-color: rgba(255, 107, 138, 0.22);
+}
+
+.merit-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  font-weight: 800;
+}
+
+.merit-item input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold);
+}
+
+.merit-item span {
+  flex: 1;
+}
+
+.merit-item strong {
+  color: var(--gold);
+}
+
+.merit-item.is-checked {
+  color: var(--ink);
+  border-color: rgba(255, 211, 122, 0.34);
+  background: rgba(255, 211, 122, 0.08);
+}
+
+.merit-reflection {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.merit-reflection label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.merit-reflection textarea {
+  min-height: 74px;
+}
+
+.merit-bonus {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 211, 122, 0.24);
+  border-radius: 999px;
+  padding: 10px 12px;
+  width: fit-content;
+  color: var(--gold);
+  background: rgba(255, 211, 122, 0.08);
+  font-weight: 900;
+}
+
 .history-shell {
   width: min(1280px, calc(100% - 34px));
 }
@@ -1342,6 +1468,8 @@ textarea {
 
 @media (max-width: 640px) {
   .history-review-grid,
+  .merit-columns,
+  .merit-score-grid,
   .history-stat-grid {
     grid-template-columns: 1fr;
   }
