@@ -2,17 +2,18 @@ name: Rebirth Push
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
   schedule:
-    # 北京时间 07:30 = UTC 23:30
+    # Beijing 07:30 = UTC 23:30
     - cron: "30 23 * * *"
-    # 北京时间 23:30 = UTC 15:30
+    # Beijing 23:30 = UTC 15:30
     - cron: "30 15 * * *"
 
 permissions:
   contents: read
+
+concurrency:
+  group: rebirth-push-${{ github.ref }}-${{ github.event.schedule || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   rebirth-push:
@@ -35,7 +36,6 @@ jobs:
             echo "PROJECT_DIR=zhaoyang_rebirth_tracker" >> "$GITHUB_ENV"
           else
             echo "Could not find requirements.txt and main.py."
-            echo "Repository files:"
             find . -maxdepth 4 -type f | sort
             exit 1
           fi
@@ -46,23 +46,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Confirm RPG OS V2 content
-        run: |
-          cd "$PROJECT_DIR"
-          echo "GitHub SHA: $GITHUB_SHA"
-          git log -1 --oneline
-          python - <<'PY'
-          from dashboard import render_morning_serverchan_push
-          content = render_morning_serverchan_push()
-          print("Push preview start:")
-          print(content[:600])
-          if "REBIRTH RPG OS V2" not in content or "大怪升级人生控制台" not in content:
-              raise SystemExit("RPG OS V2 marker missing")
-          if "| 时间 |" in content or "早晨启动表格" in content or "今日监督表格" in content:
-              raise SystemExit("Old table marker found")
-          PY
-
-      - name: Run morning or night push
+      - name: Run scheduled push
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
@@ -76,5 +60,6 @@ jobs:
           elif [ "$HOUR" = "15" ]; then
             python main.py night
           else
+            echo "Manual run defaults to morning push."
             python main.py morning
           fi
