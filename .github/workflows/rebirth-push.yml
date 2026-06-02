@@ -1,7 +1,6 @@
 name: Rebirth Push
 
 on:
-  workflow_dispatch:
   schedule:
     # Beijing 07:30 = UTC 23:30
     - cron: "30 23 * * *"
@@ -12,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rebirth-push-${{ github.ref }}-${{ github.event.schedule || github.run_id }}
+  group: rebirth-push-${{ github.event.schedule }}
   cancel-in-progress: true
 
 jobs:
@@ -46,7 +45,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run scheduled push
+      - name: Run scheduled final push only
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
@@ -60,6 +59,6 @@ jobs:
           elif [ "$HOUR" = "15" ]; then
             python main.py night
           else
-            echo "Manual run defaults to morning push."
-            python main.py morning
+            echo "Not a scheduled final push hour. No WeChat message will be sent."
+            exit 0
           fi
