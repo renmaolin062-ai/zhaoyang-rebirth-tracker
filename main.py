@@ -12,8 +12,10 @@
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import os
 import json
+import re
 import smtplib
 import sys
 import time
@@ -256,6 +258,28 @@ def send_pushplus(title: str, content: str) -> Tuple[bool, str]:
     return False, f"PushPlus 推送失败，请检查 token 是否正确。返回信息：{result}"
 
 
+def looks_like_html(content: str) -> bool:
+    """Detect HTML so ServerChan never receives raw page source."""
+    head = content.lstrip().lower()[:800]
+    return head.startswith("<!doctype") or head.startswith("<html") or "<body" in head or "<div" in head
+
+
+def html_to_serverchan_text(content: str) -> str:
+    """Convert an HTML push card into readable text for ServerChan."""
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "", content)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|div|section|article|h1|h2|h3|li)>", "\n", text)
+    text = re.sub(r"(?i)<li[^>]*>", "- ", text)
+    text = re.sub(r"(?s)<[^>]+>", "", text)
+    text = html_lib.unescape(text)
+    lines = [line.strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    readable = "\n\n".join(lines)
+    if len(readable) > 3500:
+        readable = readable[:3500].rstrip() + "\n\n......"
+    return readable or "REBIRTH RPG OS 今日任务已生成。"
+
+
 def send_serverchan(title: str, content: str) -> Tuple[bool, str]:
     """使用 Server酱 推送内容到微信。"""
     if requests is None:
@@ -270,6 +294,9 @@ def send_serverchan(title: str, content: str) -> Tuple[bool, str]:
 
     if not sendkey:
         return False, "Server酱 sendkey 为空，请打开 config.json 填写 SERVERCHAN_SENDKEY。"
+
+    if looks_like_html(content):
+        content = html_to_serverchan_text(content)
 
     api_url = f"https://sctapi.ftqq.com/{sendkey}.send"
     payload = {
